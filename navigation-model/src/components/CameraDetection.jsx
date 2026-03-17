@@ -18,6 +18,9 @@ const TamilLabels = {
   'oven': 'அடுப்பு', 'car': 'கார்', 'bus': 'பேருந்து', 'truck': 'லாரி', 'motorcycle': 'பைக்'
 };
 
+// Object Heights mapping remains for distance estimation
+
+
 const objectHeights = { // heights in meters
   'person': 1.7, 'chair': 0.8, 'dining table': 0.75, 'couch': 0.9, 'bed': 0.6,
   'tv': 0.6, 'laptop': 0.25, 'bottle': 0.25, 'cup': 0.12, 'potted plant': 0.4,
@@ -35,7 +38,7 @@ const formatDistance = (distInMeters) => {
   return cm > 0 ? `${meters} meter ${cm} centimeters` : `${meters} meters`;
 };
 
-const CameraDetection = ({ isActive, onStatusChange, onHeartbeat, zoomOut = true, emergencyActive = false, targetObject = null, lang = 'en' }) => {
+const CameraDetection = ({ isActive, onStatusChange, onHeartbeat, zoomOut = true, emergencyActive = false, targetObject = null, lang = 'en', findDoorTrigger = 0, pathCheckTrigger = 0 }) => {
   // Keep a ref so detection callbacks always see the latest lang without re-mounting
   const langRef = useRef(lang);
   useEffect(() => { langRef.current = lang; }, [lang]);
@@ -67,6 +70,9 @@ const CameraDetection = ({ isActive, onStatusChange, onHeartbeat, zoomOut = true
   const lastProcessTime = useRef(0);
   const scanInterval = useRef(100); 
   const lastSpeakTime = useRef(0);
+  const doorSearchActive = useRef(false);
+  const pathCheckRequested = useRef(false);
+  const findDoorAttemptCount = useRef(0);
   
   // eslint-disable-next-line no-unused-vars
   const targetClasses = [
@@ -78,6 +84,22 @@ const CameraDetection = ({ isActive, onStatusChange, onHeartbeat, zoomOut = true
     'hair drier', 'toothbrush', 'sink', 'toilet', 'book', 'clock',
     'door', 'window', 'stairs', 'cell phone', 'backpack', 'handbag', 'suitcase'
   ];
+
+  // HANDLE VOICE COMMAND TRIGGERS
+  useEffect(() => {
+    if (findDoorTrigger > 0) {
+      console.log("🔍 VOICE CMD: Find Door requested");
+      doorSearchActive.current = true;
+      findDoorAttemptCount.current = 0;
+    }
+  }, [findDoorTrigger]);
+
+  useEffect(() => {
+    if (pathCheckTrigger > 0) {
+      console.log("🔍 VOICE CMD: Path Clear check for 10m requested");
+      pathCheckRequested.current = true;
+    }
+  }, [pathCheckTrigger]);
 
   // LOAD MODEL
   useEffect(() => {
@@ -210,9 +232,11 @@ const CameraDetection = ({ isActive, onStatusChange, onHeartbeat, zoomOut = true
   };
 
   const detectFrame = async () => {
-    if (!isMounted.current) return; // Hard loop stop
-
+    if (!isMounted.current) return;
     const video = videoRef.current;
+    if (video && video.readyState === 4) {
+      console.log("🔄 Detection Loop Heartbeat...");
+    }
     const canvas = canvasRef.current;
     if (!video || !canvas || !model) return;
 
@@ -322,6 +346,8 @@ const CameraDetection = ({ isActive, onStatusChange, onHeartbeat, zoomOut = true
   };
 
   // GROUND HAZARD (PIT/HOLE) DETECTION
+
+  // GROUND HAZARD (PIT/HOLE) DETECTION
   const analyzeGroundHazard = (video) => {
     try {
       const canvas = document.createElement('canvas');
@@ -357,6 +383,10 @@ const CameraDetection = ({ isActive, onStatusChange, onHeartbeat, zoomOut = true
     const now = Date.now();
     const video = videoRef.current;
     if (!video) return;
+
+    if (predictions.length > 0) {
+       console.log(`🤖 Model detected ${predictions.length} objects:`, predictions.map(p => p.class));
+    }
     
     // Targeted Detection Filter
     let activePredictions = predictions;
@@ -406,43 +436,58 @@ const CameraDetection = ({ isActive, onStatusChange, onHeartbeat, zoomOut = true
       }
     }
 
-    // 2. Smart Path Guidance (3-Zone Analysis) - Disable if targeting specific object
-    if (!targetObject) {
-      const getZoneClearance = (minX, maxX, range) => {
-        const zoneObjects = activePredictions.filter(p => {
-          const centerX = p.bbox[0] + p.bbox[2]/2;
-          return centerX > videoWidth * minX && centerX < videoWidth * maxX;
-        });
-        return zoneObjects.every(p => {
-          const dist = (videoHeight * 0.8 * (objectHeights[p.class] || 0.5)) / p.bbox[3];
-          return dist > range;
-        });
-      };
+    // 2. Smart Path Guidance (3-Zone Analysis)
+    const getZoneClearance = (minX, maxX, range) => {
+      // We check ALL predictions for path clearance, not just the filtered ones
+      const zoneObjects = predictions.filter(p => {
+        const centerX = p.bbox[0] + p.bbox[2]/2;
+        return centerX > videoWidth * minX && centerX < videoWidth * maxX;
+      });
+      return zoneObjects.every(p => {
+        const dist = (videoHeight * 0.8 * (objectHeights[p.class] || 0.5)) / p.bbox[3];
+        return dist > range;
+      });
+    };
 
-      const centerClearArr = getZoneClearance(0.33, 0.66, 10);
-      const leftClearArr = getZoneClearance(0, 0.33, 5);
-      const rightClearArr = getZoneClearance(0.66, 1, 5);
+    const centerClearArr = getZoneClearance(0.33, 0.66, 10);
+    const leftClearArr = getZoneClearance(0, 0.33, 5);
+    const rightClearArr = getZoneClearance(0.66, 1, 5);
 
       if (centerClearArr) {
-        if (now - lastPathClearAlertTime.current > 7000) { 
+        if (now - lastPathClearAlertTime.current > 7000 || pathCheckRequested.current) { 
           console.log("✅ CENTER PATH CLEAR (10M)");
-          alerts.push(getMessage('pathClear', activeLang));
+          const msg = getMessage('pathClear10m', activeLang);
+          alerts.push(msg);
           lastPathClearAlertTime.current = now;
+          pathCheckRequested.current = false;
         }
       } else {
         // Path is blocked in center, suggest a turn
-        if (now - lastPathClearAlertTime.current > 3000) { // 3s throttle for turn suggestions
+        if (pathCheckRequested.current) {
+            // Find the closest obstacle for the status report
+            const closest = predictions.filter(p => {
+                const centerX = p.bbox[0] + p.bbox[2]/2;
+                return centerX > videoWidth * 0.33 && centerX < videoWidth * 0.66;
+            }).sort((a,b) => b.bbox[3] - a.bbox[3])[0]; // Largest height = closest
+
+            if (closest) {
+                const d = (videoHeight * 0.8 * (objectHeights[closest.class] || 0.5)) / closest.bbox[3];
+                alerts.push(getMessage('obstacleAt', activeLang, d.toFixed(1)));
+            }
+            pathCheckRequested.current = false;
+        }
+
+        if (now - lastPathClearAlertTime.current > 3000) { 
           if (rightClearArr) {
-            alerts.push(getMessage('obstAhead', activeLang));  // Move right
+            alerts.push(getMessage('moveRight', activeLang)); 
           } else if (leftClearArr) {
-            alerts.push(getMessage('obstLeft', activeLang));   // Move left
+            alerts.push(getMessage('moveLeft', activeLang));
           } else {
             alerts.push(getMessage('hold', activeLang));
           }
           lastPathClearAlertTime.current = now;
         }
       }
-    }
     
     // 1. Identify "In-Hand" objects (small objects near persons)
     const persons = activePredictions.filter(p => p.class === 'person' && p.score > 0.3);
@@ -462,9 +507,19 @@ const CameraDetection = ({ isActive, onStatusChange, onHeartbeat, zoomOut = true
     });
 
     activePredictions.forEach(p => {
-      if (p.score < 0.3) return;
-      
+      // Increase confidence threshold to 0.65 to reduce misclassification
+      if (p.score < 0.65) return;
+
+      // DOOR CORRECTION LOGIC:
+      // COCO-SSD often misses doors or mislabels them as refrigerators/TVs.
+      // If we see a vertical rectangle (height > width * 1.5) that isn't a person, 
+      // bias it towards being a door.
       const [x, y, width, height] = p.bbox;
+      const ratio = height / width;
+      if (ratio > 1.8 && !['person', 'standing person'].includes(p.class)) {
+          console.log(`🚪 DOOR CORRECTION: Re-labeled ${p.class} as door due to vertical aspect ratio.`);
+          p.class = 'door';
+      }
       const realHeight = objectHeights[p.class] || 0.5; 
       const focalLength = videoHeight * 0.8; 
       const dist = (focalLength * realHeight) / height;
@@ -529,8 +584,14 @@ const CameraDetection = ({ isActive, onStatusChange, onHeartbeat, zoomOut = true
         }
 
         alerts.push(alertMsg);
-        // Play spatial sound based on position and distance
-        playSpatialSound(positionLabel, dist);
+        
+        // 3D AUDIO MAPPING
+        // X: Normalized screen position mapped to -5 (left) to 5 (right)
+        // Y: Normalized screen height mapped to 2 (top) to -2 (bottom) 
+        // Z: Calculated depth (dist)
+        const nx = ((x + width / 2) / videoWidth - 0.5) * 10;
+        const ny = (0.5 - (y + height / 2) / videoHeight) * 4;
+        playSpatialSound(nx, ny, dist, label);
         
         // Update state
         objectAlertStates.current[objKey] = {
@@ -538,8 +599,35 @@ const CameraDetection = ({ isActive, onStatusChange, onHeartbeat, zoomOut = true
           position: positionLabel,
           distance: dist
         };
+
+        // SMART GUIDANCE: MOVEMENT SUGGESTIONS
+        if (dist < 3.0 && positionLabel === "center") {
+           if (rightClearArr) {
+             alerts.push(getMessage('moveRight', activeLang));
+           } else if (leftClearArr) {
+             alerts.push(getMessage('moveLeft', activeLang));
+           } else {
+             alerts.push(getMessage('stopClose', activeLang));
+           }
+        }
       }
     });
+
+    // Handle Targeted "Find Door" scan
+    if (doorSearchActive.current) {
+        findDoorAttemptCount.current++;
+        const foundDoor = activePredictions.find(p => p.class === 'door');
+        if (foundDoor) {
+            const [x, , width] = foundDoor.bbox;
+            const pos = x + width / 2 < videoWidth * 0.35 ? "left" : (x + width / 2 > videoWidth * 0.65 ? "right" : "center");
+            const sideLabel = activeLang === 'ta' ? (pos === "left" ? "இடது" : pos === "right" ? "வலது" : "நேராக") : pos;
+            speak(getMessage('doorDetected', activeLang, sideLabel), locale);
+            doorSearchActive.current = false;
+        } else if (findDoorAttemptCount.current > 15) { // Try for ~1.5 seconds
+            speak(getMessage('doorNotFound', activeLang), locale);
+            doorSearchActive.current = false;
+        }
+    }
 
     if (alerts.length > 0) {
       console.log("📢 QUEUING ALERTS:", alerts);

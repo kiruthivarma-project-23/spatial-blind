@@ -26,6 +26,8 @@ const Home = () => {
   const [voiceCount, setVoiceCount] = useState(0);
   const [isListening, setIsListening] = useState(false);
   const [targetObject, setTargetObject] = useState(null);
+  const [findDoorTrigger, setFindDoorTrigger] = useState(0);
+  const [pathCheckTrigger, setPathCheckTrigger] = useState(0);
 
   useEffect(() => {
     const checkVoices = () => {
@@ -170,6 +172,14 @@ const Home = () => {
       case "NAVIGATE_DEST":
         gpsEngine.setDestination(13.0827, 80.2707);
         break;
+      case "FIND_DOOR":
+        setFindDoorTrigger(prev => prev + 1);
+        setStatusText("Scanning for door...");
+        break;
+      case "PATH_CLEAR_CHECK":
+        setPathCheckTrigger(prev => prev + 1);
+        setStatusText("Analyzing path for 10 meters...");
+        break;
       default:
         break;
     }
@@ -241,6 +251,8 @@ const Home = () => {
             emergencyActive={emergencyActive}
             targetObject={targetObject}
             lang={lang}
+            findDoorTrigger={findDoorTrigger}
+            pathCheckTrigger={pathCheckTrigger}
           />
           <div className="flex gap-4 w-full md:w-auto justify-center">
             <button

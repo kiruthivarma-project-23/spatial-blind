@@ -44,6 +44,15 @@ export const MESSAGES = {
     // Language
     langSwitched:   "Switched to English.",
 
+    // Navigation Queries
+    doorDetected: (pos) => `Door detected on the ${pos}.`,
+    doorNotFound: "Door not detected nearby.",
+    pathClear10m: "Path is clear for 10 meters.",
+    obstacleAt: (dist) => `Obstacle ahead at ${dist} meters.`,
+    moveLeft: "Move slightly left.",
+    moveRight: "Move slightly right.",
+    stopClose: "Stop! Obstacle very close.",
+
     // System
     modelFail:      "Alert. AI Vision model failed to load. Please refresh.",
     speechReset:    "System Reset Performed.",
@@ -88,6 +97,15 @@ export const MESSAGES = {
 
     // Language
     langSwitched:   "தமிழ் மொழிக்கு மாற்றப்பட்டது.",
+
+    // Navigation Queries
+    doorDetected: (pos) => `${pos} பக்கம் கதவு உள்ளது.`,
+    doorNotFound: "அருகில் கதவு எதுவும் கண்டறியப்படவில்லை.",
+    pathClear10m: "10 மீட்டர் வரை பாதை தெளிவாக உள்ளது.",
+    obstacleAt: (dist) => `முன்னால் ${dist} மீட்டரில் தடை உள்ளது.`,
+    moveLeft: "கொஞ்சம் இடதுபுறம் நகருங்கள்.",
+    moveRight: "கொஞ்சம் வலதுபுறம் நகருங்கள்.",
+    stopClose: "நில்லுங்கள்! தடை மிக அருகில் உள்ளது.",
 
     // System
     modelFail:      "எச்சரிக்கை. ஏஐ விஷன் மாடல் லோட் ஆகவில்லை. புதுப்பித்துப் பாருங்கள்.",

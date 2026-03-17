@@ -41,6 +41,14 @@ const CMD_KEYWORDS = {
     en: ['navigate to', 'take me to', 'go to destination'],
     ta: ['ange selvom', 'ilaaki sellu', 'navigate pannunga', 'செல்ல வேண்டும்', 'இலக்குக்குச் செல்'],
   },
+  FIND_DOOR: {
+    en: ['find door', 'where is the door', 'find entrance', 'find exit'],
+    ta: ['door enga irukku', 'door kandupidi', 'kadhavu enga', 'door எங்க இருக்கு', 'கதவைத் தேடு'],
+  },
+  PATH_CLEAR_CHECK: {
+    en: ['is the path clear for 10 meters', 'is path clear', 'path check', '10 meters clear'],
+    ta: ['10 meter varai path clear aa', 'padhai clear aa', 'vazhi clear aa', 'பாதை தெளிவாக இருக்கிறதா'],
+  },
 };
 
 /**
@@ -134,6 +142,7 @@ const VoiceAssistant = ({ onCommand, onListening, lang = 'en' }) => {
       const namedCmds = [
         'START', 'STOP', 'HELP_ME', 'AMBULANCE', 'STATUS',
         'REPEAT', 'ZOOM_OUT', 'OPEN_SETTINGS', 'NAVIGATE_DEST',
+        'FIND_DOOR', 'PATH_CLEAR_CHECK',
       ];
 
       // Try active language first, then the other language as fallback
