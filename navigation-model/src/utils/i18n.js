@@ -53,6 +53,17 @@ export const MESSAGES = {
     moveRight: "Move slightly right.",
     stopClose: "Stop! Obstacle very close.",
 
+    // UPI Payments
+    payInit: "Payment assistant active. Opening scanner.",
+    qrDetected: (name) => `QR code for ${name} detected.`,
+    confirmPayee: (name) => `Do you want to pay ${name}? Say yes or confirm.`,
+    askAmount: "How much would you like to send?",
+    confirmAmount: (amt) => `You said ${amt} rupees. Is this correct? Say confirm or no.`,
+    payRedirect: (amt, name) => `Redirecting to payment app to send ${amt} to ${name}.`,
+    payCancel: "Payment cancelled.",
+    insufficientFunds: "Insufficient balance for this transaction.",
+    balanceReport: (bal) => `Your balance is ${bal} rupees.`,
+
     // System
     modelFail:      "Alert. AI Vision model failed to load. Please refresh.",
     speechReset:    "System Reset Performed.",
@@ -106,6 +117,17 @@ export const MESSAGES = {
     moveLeft: "கொஞ்சம் இடதுபுறம் நகருங்கள்.",
     moveRight: "கொஞ்சம் வலதுபுறம் நகருங்கள்.",
     stopClose: "நில்லுங்கள்! தடை மிக அருகில் உள்ளது.",
+
+    // UPI Payments
+    payInit: "பேமெண்ட் அசிஸ்டண்ட் தயார். ஸ்கேனர் திறக்கப்படுகிறது.",
+    qrDetected: (name) => `${name}-க்கான கியூ ஆர் கோட் கண்டறியப்பட்டது.`,
+    confirmPayee: (name) => `நீங்கள் ${name}-க்கு பணம் அனுப்ப விரும்புகிறீர்களா? ஆம் அல்லது உறுதிப்படுத்து என்று சொல்லுங்கள்.`,
+    askAmount: "எவ்வளவு பணம் அனுப்ப வேண்டும்?",
+    confirmAmount: (amt) => `நீங்கள் ${amt} ரூபாய் என்று சொன்னீர்கள். இது சரியானதா? உறுதிப்படுத்து அல்லது இல்லை என்று சொல்லுங்கள்.`,
+    payRedirect: (amt, name) => `${amt} ரூபாயை ${name}-க்கு அனுப்ப பேமெண்ட் ஆப் திறக்கப்படுகிறது.`,
+    payCancel: "பணம் செலுத்துவது ரத்து செய்யப்பட்டது.",
+    insufficientFunds: "இந்த பரிவர்த்தனைக்கு உங்கள் இருப்பில் போதுமான பணம் இல்லை.",
+    balanceReport: (bal) => `உங்கள் இருப்பில் ${bal} ரூபாய் உள்ளது.`,
 
     // System
     modelFail:      "எச்சரிக்கை. ஏஐ விஷன் மாடல் லோட் ஆகவில்லை. புதுப்பித்துப் பாருங்கள்.",

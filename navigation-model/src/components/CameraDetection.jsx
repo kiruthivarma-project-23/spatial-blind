@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as tf from "@tensorflow/tfjs";
 import * as cocossd from "@tensorflow-models/coco-ssd";
+import jsQR from "jsqr";
 // eslint-disable-next-line no-unused-vars
 import { motion } from "framer-motion";
 import { triggerVibration } from "../utils/HapticFeedback";
@@ -38,7 +39,7 @@ const formatDistance = (distInMeters) => {
   return cm > 0 ? `${meters} meter ${cm} centimeters` : `${meters} meters`;
 };
 
-const CameraDetection = ({ isActive, onStatusChange, onHeartbeat, zoomOut = true, emergencyActive = false, targetObject = null, lang = 'en', findDoorTrigger = 0, pathCheckTrigger = 0 }) => {
+const CameraDetection = ({ isActive, onStatusChange, onHeartbeat, zoomOut = true, emergencyActive = false, targetObject = null, lang = 'en', findDoorTrigger = 0, pathCheckTrigger = 0, isScanningPayment = false, onQrDetected = null }) => {
   // Keep a ref so detection callbacks always see the latest lang without re-mounting
   const langRef = useRef(lang);
   useEffect(() => { langRef.current = lang; }, [lang]);
@@ -234,12 +235,13 @@ const CameraDetection = ({ isActive, onStatusChange, onHeartbeat, zoomOut = true
   const detectFrame = async () => {
     if (!isMounted.current) return;
     const video = videoRef.current;
-    if (video && video.readyState === 4) {
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+
+    if (video.readyState === 4) {
       console.log("🔄 Detection Loop Heartbeat...");
     }
-    const canvas = canvasRef.current;
-    if (!video || !canvas || !model) return;
-
+    
     const now = Date.now();
     if (now - lastProcessTime.current < scanInterval.current) {
       if (isMounted.current) {
@@ -261,6 +263,23 @@ const CameraDetection = ({ isActive, onStatusChange, onHeartbeat, zoomOut = true
 
       lastProcessTime.current = now;
       onHeartbeat?.(); // Signal that detection is running
+
+      // ── UPI QR SCANNING ──
+      if (isScanningPayment && onQrDetected) {
+        const vidW = video.videoWidth;
+        const vidH = video.videoHeight;
+        if (vidW > 0 && vidH > 0) {
+          const qrCtx = canvas.getContext('2d', { willReadFrequently: true });
+          const imageData = qrCtx.getImageData(0, 0, vidW, vidH);
+          const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: "dontInvert",
+          });
+          if (code && code.data && code.data.startsWith('upi://pay')) {
+            console.log("💳 QR DETECTED:", code.data);
+            onQrDetected(code.data);
+          }
+        }
+      }
       
       if (predictions.length > 0) {
         console.log(`🎯 Detected ${predictions.length} objects`);

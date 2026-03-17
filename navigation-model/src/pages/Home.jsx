@@ -29,6 +29,23 @@ const Home = () => {
   const [findDoorTrigger, setFindDoorTrigger] = useState(0);
   const [pathCheckTrigger, setPathCheckTrigger] = useState(0);
 
+  // UPI Payment State
+  const [mockBalance, setMockBalance] = useState(10000);
+  const [paymentState, setPaymentState] = useState('IDLE'); // IDLE, SCANNING, CONFIRMING_PAYEE, ASKING_AMOUNT, CONFIRMING_AMOUNT
+  const [payeeData, setPayeeData] = useState(null); // { name, vpa }
+  const [pendingAmount, setPendingAmount] = useState(null);
+
+  // Use refs for values needed in the stable callback
+  const langRef = useRef(lang);
+  const paymentStateRef = useRef(paymentState);
+  const payeeDataRef = useRef(payeeData);
+  const mockBalanceRef = useRef(mockBalance);
+
+  useEffect(() => { langRef.current = lang; }, [lang]);
+  useEffect(() => { paymentStateRef.current = paymentState; }, [paymentState]);
+  useEffect(() => { payeeDataRef.current = payeeData; }, [payeeData]);
+  useEffect(() => { mockBalanceRef.current = mockBalance; }, [mockBalance]);
+
   useEffect(() => {
     const checkVoices = () => {
       const voices = window.speechSynthesis.getVoices();
@@ -93,13 +110,13 @@ const Home = () => {
     if (typeof command === 'object' && command !== null) {
       if (command.type === "FIND_TARGET") {
         setTargetObject(command.target);
-        speakMsg('targetLocked', lang, command.target);
+        speakMsg('targetLocked', langRef.current, command.target);
         setStatusText(`Searching for: ${command.target.toUpperCase()}`);
         return;
       }
       if (command.type === "CLEAR_TARGET") {
         setTargetObject(null);
-        speakMsg('targetCleared', lang);
+        speakMsg('targetCleared', langRef.current);
         setStatusText("System standby - Ready to assist");
         return;
       }
@@ -109,7 +126,7 @@ const Home = () => {
       case "START":
         setNavigating(prev => {
           if (!prev) {
-            speakMsg('navStart', lang);
+            speakMsg('navStart', langRef.current);
             setStatusText("Initializing camera access...");
             setAudioEnabled(true);
             gpsEngine.startTracking((coords) => {
@@ -125,7 +142,7 @@ const Home = () => {
         stopSpeaking();
         setNavigating(prev => {
           if (prev) {
-            speakMsg('navStop', lang);
+            speakMsg('navStop', langRef.current);
             gpsEngine.stopTracking();
             setTargetObject(null);
             setStatusText("System standby - Ready to assist");
@@ -138,18 +155,18 @@ const Home = () => {
         navigate('/settings');
         break;
       case "STATUS":
-        speakMsg('statusMsg', lang, statusTextRef.current);
+        speakMsg('statusMsg', langRef.current, statusTextRef.current);
         break;
       case "REPEAT":
-        speak(statusTextRef.current, LANG_CODES[lang]);
+        speak(statusTextRef.current, LANG_CODES[langRef.current]);
         break;
       case "ZOOM_OUT":
         setZoomOut(true);
-        speakMsg('zoomOut', lang);
+        speakMsg('zoomOut', langRef.current);
         break;
       case "HELP_ME":
       case "AMBULANCE":
-        speakMsg('helpCalled', lang);
+        speakMsg('helpCalled', langRef.current);
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition((pos) => {
             const { latitude, longitude } = pos.coords;
@@ -180,11 +197,90 @@ const Home = () => {
         setPathCheckTrigger(prev => prev + 1);
         setStatusText("Analyzing path for 10 meters...");
         break;
+      case "OPEN_PAYMENT":
+        setPaymentState('SCANNING');
+        speakMsg('payInit', langRef.current);
+        setStatusText("Payment: Scanning QR Code...");
+        break;
+      case "BALANCE":
+        speakMsg('balanceReport', langRef.current, mockBalanceRef.current);
+        break;
+      case "YES":
+        handlePaymentConfirm();
+        break;
+      case "NO":
+        handlePaymentCancel();
+        break;
       default:
+        // Handle Object-based Commands
+        if (typeof command === 'object' && command.type === 'PAY_AMOUNT') {
+          handleAmountEntry(command.amount);
+        }
         break;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lang]); // Re-create when lang changes so messages are correct
+  }, []); // Stable callback ref
+
+  const handleAmountEntry = (amt) => {
+    if (paymentState !== 'ASKING_AMOUNT') return;
+    if (amt > mockBalance) {
+      speakMsg('insufficientFunds', lang);
+      return;
+    }
+    setPendingAmount(amt);
+    setPaymentState('CONFIRMING_AMOUNT');
+    speakMsg('confirmAmount', lang, amt);
+    setStatusText(`Confirm payment of ₹${amt}?`);
+  };
+
+  const handlePaymentConfirm = () => {
+    if (paymentState === 'CONFIRMING_PAYEE') {
+      setPaymentState('ASKING_AMOUNT');
+      speakMsg('askAmount', lang);
+      setStatusText(`Payee: ${payeeData.name}. Enter Amount.`);
+    } else if (paymentState === 'CONFIRMING_AMOUNT') {
+      triggerPaymentRedirect();
+    }
+  };
+
+  const handlePaymentCancel = () => {
+    setPaymentState('IDLE');
+    setPayeeData(null);
+    setPendingAmount(null);
+    speakMsg('payCancel', lang);
+    setStatusText("System standby - Ready to assist");
+  };
+
+  const triggerPaymentRedirect = () => {
+    const upiUrl = `upi://pay?pa=${payeeData.vpa}&pn=${encodeURIComponent(payeeData.name)}&am=${pendingAmount}&cu=INR`;
+    speakMsg('payRedirect', lang, pendingAmount, payeeData.name);
+    
+    // Simulate balance deduction for demo
+    setMockBalance(prev => prev - pendingAmount);
+    
+    setTimeout(() => {
+      window.location.href = upiUrl;
+      // Reset state after a delay (assuming user comes back or app switches)
+      setPaymentState('IDLE');
+      setPayeeData(null);
+      setPendingAmount(null);
+    }, 2000);
+  };
+
+  const handleQrDetected = (data) => {
+    if (paymentState !== 'SCANNING') return;
+    // data usually upi://pay?pa=...&pn=...
+    const url = new URL(data.replace('upi://pay', 'http://upi'));
+    const pa = url.searchParams.get('pa');
+    const pn = url.searchParams.get('pn') || pa; // Use VPA as name if PN is missing
+    
+    setPayeeData({ name: pn, vpa: pa });
+    setPaymentState('CONFIRMING_PAYEE');
+    speakMsg('qrDetected', lang, pn);
+    setTimeout(() => {
+      speakMsg('confirmPayee', lang, pn);
+    }, 1500);
+    setStatusText(`Payee detected: ${pn}. Confirm?`);
+  };
 
   const performSelfTest = () => {
     console.log("🧪 Diagnostic: Performing Self Test...");
@@ -253,7 +349,57 @@ const Home = () => {
             lang={lang}
             findDoorTrigger={findDoorTrigger}
             pathCheckTrigger={pathCheckTrigger}
+            isScanningPayment={paymentState === 'SCANNING'}
+            onQrDetected={handleQrDetected}
           />
+
+          {/* PAYMENT UI OVERLAY */}
+          {paymentState !== 'IDLE' && (
+            <div className="absolute bottom-10 right-10 w-full max-w-sm bg-black/80 backdrop-blur-xl border-2 border-green-500 rounded-3xl p-6 z-50 shadow-[0_0_40px_rgba(34,197,94,0.3)] motion-safe:animate-bounce-subtle">
+              <div className="flex flex-col items-center gap-4 text-center">
+                <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center border border-green-500">
+                  <div className="w-8 h-8 bg-green-500 rounded-full animate-pulse"></div>
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-green-400 tracking-tighter uppercase">
+                    UPI Payment Mode
+                  </h2>
+                  <p className="text-gray-300 mt-2 font-mono">
+                    {statusText}
+                  </p>
+                </div>
+                {paymentState === 'CONFIRMING_PAYEE' && payeeData && (
+                  <div className="bg-white/5 p-4 rounded-xl w-full border border-white/10">
+                    <p className="text-xs text-gray-500 uppercase tracking-widest">Receiver</p>
+                    <p className="text-xl font-bold text-white">{payeeData.name}</p>
+                    <p className="text-xs text-gray-400 font-mono mt-1">{payeeData.vpa}</p>
+                  </div>
+                )}
+                {paymentState === 'CONFIRMING_AMOUNT' && pendingAmount && (
+                    <div className="bg-green-500/10 p-4 rounded-xl w-full border border-green-500/30">
+                        <p className="text-xs text-green-500 uppercase tracking-widest">Amount to Send</p>
+                        <p className="text-4xl font-black text-white">₹{pendingAmount}</p>
+                    </div>
+                )}
+                <div className="flex gap-4 w-full mt-2">
+                  <button 
+                    onClick={handlePaymentCancel}
+                    className="flex-1 py-3 bg-red-900/30 border border-red-500/50 text-red-500 rounded-xl font-bold hover:bg-red-500/20 transition-all uppercase tracking-widest text-xs"
+                  >
+                    Cancel
+                  </button>
+                  { (paymentState === 'CONFIRMING_PAYEE' || paymentState === 'CONFIRMING_AMOUNT') && (
+                    <button 
+                      onClick={handlePaymentConfirm}
+                      className="flex-1 py-3 bg-green-500 text-black rounded-xl font-black hover:bg-green-400 transition-all uppercase tracking-widest text-xs"
+                    >
+                      Confirm
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
           <div className="flex gap-4 w-full md:w-auto justify-center">
             <button
               onClick={stopNavigation}
@@ -372,6 +518,7 @@ const Home = () => {
             <span>Listening:</span> <span className={isListening ? "text-green-500" : "text-red-500"}>{isListening ? "YES" : "NO"}</span>
             <span>Voices:</span> <span className={voiceCount > 0 ? "text-green-500" : "text-red-500"}>{voiceCount} Available</span>
             <span>Emergency:</span> <span className={emergencyActive ? "text-red-500 animate-pulse" : "text-gray-500"}>{emergencyActive ? "ACTIVE" : "OFF"}</span>
+            <span>Mock Balance:</span> <span className="text-green-400 font-bold">₹{mockBalance}</span>
           </div>
           <div className="flex gap-2 mt-2">
             <button
